@@ -1,0 +1,135 @@
+#1. question_2_peak_count.sql
+Business Question: Number of video games that peaked before 2020 and have either declined or disappeared by 2024.
+
+SQL
+WITH YearlyGameTotals AS (
+    SELECT game_name, year_record, SUM(hours_watched) AS annual_hours
+    FROM streaming_viewership
+    GROUP BY game_name, year_record
+),
+GamePeaks AS (
+    SELECT 
+        game_name,
+        year_record AS peak_year,
+        annual_hours AS peak_hours,
+        ROW_NUMBER() OVER (PARTITION BY game_name ORDER BY annual_hours DESC) AS rank_order
+    FROM YearlyGameTotals
+),
+CurrentYearPerformance AS (
+    SELECT game_name, annual_hours AS hours_2024
+    FROM YearlyGameTotals
+    WHERE year_record = 2024
+)
+SELECT COUNT(p.game_name) AS "Total Games Declined or Disappeared"
+FROM GamePeaks p
+LEFT JOIN CurrentYearPerformance c ON p.game_name = c.game_name
+WHERE p.rank_order = 1 
+  AND p.peak_year < 2020
+  AND COALESCE(c.hours_2024, 0) < p.peak_hours;
+#2. question_3_top_10_peaks.sql
+Business Question: Top 10 highest peak video games from that list.
+
+SQL
+WITH YearlyGameTotals AS (
+    SELECT game_name, year_record, SUM(hours_watched) AS annual_hours
+    FROM streaming_viewership
+    GROUP BY game_name, year_record
+),
+GamePeaks AS (
+    SELECT 
+        game_name,
+        year_record AS peak_year,
+        annual_hours AS peak_hours,
+        ROW_NUMBER() OVER (PARTITION BY game_name ORDER BY annual_hours DESC) AS rank_order
+    FROM YearlyGameTotals
+),
+CurrentYearPerformance AS (
+    SELECT game_name, annual_hours AS hours_2024
+    FROM YearlyGameTotals
+    WHERE year_record = 2024
+)
+SELECT TOP 10
+    p.game_name AS "Game Title",
+    p.peak_year AS "Peak Year",
+    p.peak_hours AS "Peak Hours Watched"
+FROM GamePeaks p
+LEFT JOIN CurrentYearPerformance c ON p.game_name = c.game_name
+WHERE p.rank_order = 1 
+  AND p.peak_year < 2020
+  AND COALESCE(c.hours_2024, 0) < p.peak_hours
+ORDER BY p.peak_hours DESC;
+#3. question_4_disappeared_games.sql
+Business Question: Games from that list that disappeared completely in 2024.
+
+SQL
+WITH YearlyGameTotals AS (
+    SELECT game_name, year_record, SUM(hours_watched) AS annual_hours
+    FROM streaming_viewership
+    GROUP BY game_name, year_record
+),
+GamePeaks AS (
+    SELECT 
+        game_name,
+        year_record AS peak_year,
+        annual_hours AS peak_hours,
+        ROW_NUMBER() OVER (PARTITION BY game_name ORDER BY annual_hours DESC) AS rank_order
+    FROM YearlyGameTotals
+),
+CurrentYearPerformance AS (
+    SELECT game_name, annual_hours AS hours_2024
+    FROM YearlyGameTotals
+    WHERE year_record = 2024
+)
+SELECT p.game_name AS "Disappeared Game Title"
+FROM GamePeaks p
+LEFT JOIN CurrentYearPerformance c ON p.game_name = c.game_name
+WHERE p.rank_order = 1 
+  AND p.peak_year < 2020
+  AND COALESCE(c.hours_2024, 0) = 0; -- Explicitly looking for complete disappearances
+#4. question_5_market_share_2023.sql
+Business Question: In 2023, which category had the highest market share change compared to 2022? Just Chatting or Video Games? Why?
+
+SQL
+WITH CategorizedData AS (
+    SELECT 
+        year_record,
+        CASE 
+            WHEN LOWER(TRIM(game_name)) = 'just chatting' THEN 'Just Chatting'
+            ELSE 'Traditional Video Games'
+        END AS broad_category,
+        SUM(hours_watched) AS total_hours
+    FROM streaming_viewership
+    WHERE year_record IN (2022, 2023)
+    GROUP BY year_record,
+             CASE 
+                WHEN LOWER(TRIM(game_name)) = 'just chatting' THEN 'Just Chatting'
+                ELSE 'Traditional Video Games'
+             END
+)
+SELECT 
+    year_record AS "Year",
+    broad_category AS "Category",
+    total_hours AS "Total Hours Watched",
+    ROUND(100.0 * total_hours / SUM(total_hours) OVER (PARTITION BY year_record), 2) AS "Platform Market Share %"
+FROM CategorizedData
+ORDER BY broad_category, year_record;
+#5. question_6_timeline_flip_2024.sql
+Business Question: In 2024, did the pattern look different? Why? (Controlled Months 1–9 comparison).
+
+SQL
+SELECT 
+    year_record AS "Year",
+    CASE 
+        WHEN LOWER(TRIM(game_name)) = 'just chatting' THEN 'Just Chatting'
+        ELSE 'Traditional Video Games'
+    END AS "Category",
+    SUM(hours_watched) AS "Adjusted Hours Watched (Jan-Sept)"
+FROM streaming_viewership
+WHERE month_record <= 9 
+  AND year_record IN (2023, 2024)
+GROUP BY year_record,
+         CASE 
+            WHEN LOWER(TRIM(game_name)) = 'just chatting' THEN 'Just Chatting'
+            ELSE 'Traditional Video Games'
+         END
+ORDER BY "Category", year_record;
